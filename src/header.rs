@@ -53,7 +53,7 @@ impl Header {
         out[..4].copy_from_slice(&QOI_MAGIC.to_le_bytes());
         out[4..6].copy_from_slice(&self.width.to_le_bytes());
         out[6..8].copy_from_slice(&self.height.to_le_bytes());
-        out[6..12].copy_from_slice(&data_length.to_le_bytes());
+        out[8..12].copy_from_slice(&data_length.to_le_bytes());
         Ok(out)
     }
 
