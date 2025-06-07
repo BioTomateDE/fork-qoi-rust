@@ -7,14 +7,10 @@
 [![MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![unsafe forbidden](https://img.shields.io/badge/unsafe-forbidden-success.svg)](https://github.com/rust-secure-code/safety-dance)
 
-Fast encoder/decoder for [QOI image format](https://qoiformat.org/), implemented in pure and safe Rust.
-
-- One of the [fastest](#benchmarks) QOI encoders/decoders out there.
-- Compliant with the [latest](https://qoiformat.org/qoi-specification.pdf) QOI format specification.
-- Zero unsafe code.
-- Supports decoding from / encoding to `std::io` streams directly.
-- `no_std` support.
-- Roundtrip-tested vs the reference C implementation; fuzz-tested.
+Fork of the rust crate `qoi` ([GitHub](https://github.com/aldanor/qoi-rust), [Docs](https://docs.rs/qoi/latest/qoi/)).
+Changes all instances of `*_be_bytes` to `_le_bytes`; changing the QOI header's endianness from big to little endian.
+This is not part of the official QOI format (which is why I needed to fork this crate).
+The library's tests don't work.
 
 ### Examples
 

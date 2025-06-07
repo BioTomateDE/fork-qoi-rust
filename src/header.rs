@@ -69,9 +69,9 @@ impl Header {
     #[inline]
     pub fn encode(&self) -> [u8; QOI_HEADER_SIZE] {
         let mut out = [0; QOI_HEADER_SIZE];
-        out[..4].copy_from_slice(&QOI_MAGIC.to_be_bytes());
-        out[4..8].copy_from_slice(&self.width.to_be_bytes());
-        out[8..12].copy_from_slice(&self.height.to_be_bytes());
+        out[..4].copy_from_slice(&QOI_MAGIC.to_le_bytes());
+        out[4..8].copy_from_slice(&self.width.to_le_bytes());
+        out[8..12].copy_from_slice(&self.height.to_le_bytes());
         out[12] = self.channels.into();
         out[13] = self.colorspace.into();
         out
@@ -85,9 +85,9 @@ impl Header {
             return Err(Error::UnexpectedBufferEnd);
         }
         let v = cast_slice::<_, [u8; 4]>(&data[..12]);
-        let magic = u32::from_be_bytes(v[0]);
-        let width = u32::from_be_bytes(v[1]);
-        let height = u32::from_be_bytes(v[2]);
+        let magic = u32::from_le_bytes(v[0]);
+        let width = u32::from_le_bytes(v[1]);
+        let height = u32::from_le_bytes(v[2]);
         let channels = data[12].try_into()?;
         let colorspace = data[13].try_into()?;
         if unlikely(magic != QOI_MAGIC) {

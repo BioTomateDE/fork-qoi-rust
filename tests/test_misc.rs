@@ -22,9 +22,3 @@ fn test_start_with_qoi_op_run() -> Result<()> {
     Ok(())
 }
 
-#[cfg(target_endian = "big")]
-#[test]
-fn test_big_endian() {
-    // so we can see it in the CI logs
-    assert_eq!(u16::to_be_bytes(1), [0, 1]);
-}

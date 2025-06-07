@@ -34,7 +34,7 @@ impl Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             Self::InvalidMagic { magic } => {
-                write!(f, "invalid magic: expected {:?}, got {:?}", QOI_MAGIC, magic.to_be_bytes())
+                write!(f, "invalid magic: expected {:?}, got {:?}", QOI_MAGIC, magic.to_le_bytes())
             }
             Self::InvalidChannels { channels } => {
                 write!(f, "invalid number of channels: {channels}")
