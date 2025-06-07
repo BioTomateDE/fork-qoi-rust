@@ -1,3 +1,6 @@
+//! This crate is a fork of rust's cargo crate `qoi`. It changes the header structure to fit GameMaker's custom QOI format instead of the official one.
+//! See README.md for more details on the format.
+//! ---
 //! Fast encoder/decoder for [QOI image format](https://qoiformat.org/), implemented in pure and safe Rust.
 //!
 //! - One of the [fastest](#benchmarks) QOI encoders/decoders out there.
@@ -76,7 +79,6 @@ mod encode;
 mod error;
 mod header;
 mod pixel;
-mod types;
 mod utils;
 
 #[doc(hidden)]
@@ -92,4 +94,3 @@ pub use crate::encode::{encode_max_len, encode_to_buf, Encoder};
 
 pub use crate::error::{Error, Result};
 pub use crate::header::Header;
-pub use crate::types::{Channels, ColorSpace};

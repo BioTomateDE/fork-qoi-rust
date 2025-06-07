@@ -8,14 +8,12 @@ use crate::consts::QOI_MAGIC;
 pub enum Error {
     /// Leading 4 magic bytes don't match when decoding
     InvalidMagic { magic: u32 },
-    /// Invalid number of channels: expected 3 or 4
-    InvalidChannels { channels: u8 },
-    /// Invalid color space: expected 0 or 1
-    InvalidColorSpace { colorspace: u8 },
-    /// Invalid image dimensions: can't be empty or larger than 400Mp
-    InvalidImageDimensions { width: u32, height: u32 },
+    /// Invalid image dimensions: can't be empty or have a width/height larger than 65535
+    InvalidImageDimensions { width: u16, height: u16 },
     /// Image dimensions are inconsistent with image buffer length
-    InvalidImageLength { size: usize, width: u32, height: u32 },
+    InvalidImageLength { size: usize, width: u16, height: u16 },
+    /// Should not happen if the library's code is correct. Happens when trying to write header data length but is None.
+    DataLengthNotSet,
     /// Output buffer is too small to fit encoded/decoded image
     OutputBufferTooSmall { size: usize, required: usize },
     /// Input buffer ended unexpectedly before decoding was finished
@@ -36,17 +34,14 @@ impl Display for Error {
             Self::InvalidMagic { magic } => {
                 write!(f, "invalid magic: expected {:?}, got {:?}", QOI_MAGIC, magic.to_le_bytes())
             }
-            Self::InvalidChannels { channels } => {
-                write!(f, "invalid number of channels: {channels}")
-            }
-            Self::InvalidColorSpace { colorspace } => {
-                write!(f, "invalid color space: {colorspace} (expected 0 or 1)")
-            }
             Self::InvalidImageDimensions { width, height } => {
                 write!(f, "invalid image dimensions: {width}x{height}")
             }
             Self::InvalidImageLength { size, width, height } => {
                 write!(f, "invalid image length: {size} bytes for {width}x{height}")
+            }
+            Self::DataLengthNotSet => {
+                write!(f, "Header data length not set (should not happen externally)")
             }
             Self::OutputBufferTooSmall { size, required } => {
                 write!(f, "output buffer size too small: {size} (required: {required})")

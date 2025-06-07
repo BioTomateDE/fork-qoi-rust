@@ -1,11 +1,8 @@
 use core::convert::TryInto;
 
-use bytemuck::cast_slice;
-
 use crate::consts::{QOI_HEADER_SIZE, QOI_MAGIC, QOI_PIXELS_MAX};
 use crate::encode_max_len;
 use crate::error::{Error, Result};
-use crate::types::{Channels, ColorSpace};
 use crate::utils::unlikely;
 
 /// Image header: dimensions, channels, color space.
@@ -17,64 +14,47 @@ use crate::utils::unlikely;
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Header {
     /// Image width in pixels
-    pub width: u32,
+    pub width: u16,
     /// Image height in pixels
-    pub height: u32,
-    /// Number of 8-bit channels per pixel
-    pub channels: Channels,
-    /// Color space (informative field, doesn't affect encoding)
-    pub colorspace: ColorSpace,
+    pub height: u16,
+    /// Image data length in bytes
+    pub length: Option<u32>,
 }
 
-impl Default for Header {
-    #[inline]
-    fn default() -> Self {
-        Self {
-            width: 1,
-            height: 1,
-            channels: Channels::default(),
-            colorspace: ColorSpace::default(),
-        }
-    }
-}
+// impl Default for Header {
+//     #[inline]
+//     fn default() -> Self {
+//         Self {
+//             width: 1,
+//             height: 1,
+//             channels: Channels::default(),
+//             colorspace: ColorSpace::default(),
+//         }
+//     }
+// }
 
 impl Header {
     /// Creates a new header and validates image dimensions.
     #[inline]
-    pub const fn try_new(
-        width: u32, height: u32, channels: Channels, colorspace: ColorSpace,
-    ) -> Result<Self> {
+    pub const fn try_new(width: u16, height: u16, length: Option<u32>) -> Result<Self> {
         let n_pixels = (width as usize).saturating_mul(height as usize);
         if unlikely(n_pixels == 0 || n_pixels > QOI_PIXELS_MAX) {
             return Err(Error::InvalidImageDimensions { width, height });
         }
-        Ok(Self { width, height, channels, colorspace })
+        Ok(Self { width, height, length })
     }
-
-    /// Creates a new header with modified channels.
-    #[inline]
-    pub const fn with_channels(mut self, channels: Channels) -> Self {
-        self.channels = channels;
-        self
-    }
-
-    /// Creates a new header with modified color space.
-    #[inline]
-    pub const fn with_colorspace(mut self, colorspace: ColorSpace) -> Self {
-        self.colorspace = colorspace;
-        self
-    }
-
+    
     /// Serializes the header into a bytes array.
     #[inline]
-    pub fn encode(&self) -> [u8; QOI_HEADER_SIZE] {
+    pub fn encode(&self) -> Result<[u8; QOI_HEADER_SIZE]> {
+        let data_length = self.length.ok_or_else(|| Error::DataLengthNotSet)?;
+        
         let mut out = [0; QOI_HEADER_SIZE];
         out[..4].copy_from_slice(&QOI_MAGIC.to_le_bytes());
-        out[4..8].copy_from_slice(&self.width.to_le_bytes());
-        out[8..12].copy_from_slice(&self.height.to_le_bytes());
-        out[12] = self.channels.into();
-        out[13] = self.colorspace.into();
-        out
+        out[4..6].copy_from_slice(&self.width.to_le_bytes());
+        out[6..8].copy_from_slice(&self.height.to_le_bytes());
+        out[6..12].copy_from_slice(&data_length.to_le_bytes());
+        Ok(out)
     }
 
     /// Deserializes the header from a byte array.
@@ -84,16 +64,14 @@ impl Header {
         if unlikely(data.len() < QOI_HEADER_SIZE) {
             return Err(Error::UnexpectedBufferEnd);
         }
-        let v = cast_slice::<_, [u8; 4]>(&data[..12]);
-        let magic = u32::from_le_bytes(v[0]);
-        let width = u32::from_le_bytes(v[1]);
-        let height = u32::from_le_bytes(v[2]);
-        let channels = data[12].try_into()?;
-        let colorspace = data[13].try_into()?;
+        let magic = u32::from_le_bytes(data[0..4].try_into().unwrap());
+        let width = u16::from_le_bytes(data[4..6].try_into().unwrap());
+        let height = u16::from_le_bytes(data[6..8].try_into().unwrap());
+        let length = u32::from_le_bytes(data[8..12].try_into().unwrap());
         if unlikely(magic != QOI_MAGIC) {
             return Err(Error::InvalidMagic { magic });
         }
-        Self::try_new(width, height, channels, colorspace)
+        Self::try_new(width, height, Some(length))
     }
 
     /// Returns a number of pixels in the image.
@@ -107,7 +85,7 @@ impl Header {
     /// This may come useful when pre-allocating a buffer to decode the image into.
     #[inline]
     pub const fn n_bytes(&self) -> usize {
-        self.n_pixels() * self.channels.as_u8() as usize
+        self.n_pixels() * 4
     }
 
     /// The maximum number of bytes the encoded image will take.
@@ -115,6 +93,6 @@ impl Header {
     /// Can be used to pre-allocate the buffer to encode the image into.
     #[inline]
     pub fn encode_max_len(&self) -> usize {
-        encode_max_len(self.width, self.height, self.channels)
+        encode_max_len(self.width, self.height)
     }
 }

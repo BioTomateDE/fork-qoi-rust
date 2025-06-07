@@ -12,8 +12,7 @@ use crate::consts::{
 };
 use crate::error::{Error, Result};
 use crate::header::Header;
-use crate::pixel::{Pixel, SupportedChannels};
-use crate::types::Channels;
+use crate::pixel::Pixel;
 use crate::utils::{cold, unlikely};
 
 const QOI_OP_INDEX_END: u8 = QOI_OP_INDEX | 0x3f;
@@ -22,18 +21,14 @@ const QOI_OP_DIFF_END: u8 = QOI_OP_DIFF | 0x3f;
 const QOI_OP_LUMA_END: u8 = QOI_OP_LUMA | 0x3f;
 
 #[inline]
-fn decode_impl_slice<const N: usize, const RGBA: bool>(data: &[u8], out: &mut [u8]) -> Result<usize>
-where
-    Pixel<N>: SupportedChannels,
-    [u8; N]: Pod,
-{
-    let mut pixels = cast_slice_mut::<_, [u8; N]>(out);
+fn decode_impl_slice(data: &[u8], out: &mut [u8]) -> Result<usize> {
+    let mut pixels = cast_slice_mut::<_, [u8; 4]>(out);
     let data_len = data.len();
     let mut data = data;
 
-    let mut index = [Pixel::<4>::new(); 256];
-    let mut px = Pixel::<N>::new().with_a(0xff);
-    let mut px_rgba: Pixel<4>;
+    let mut index = [Pixel::new(); 256];
+    let mut px = Pixel::new().with_a(0xff);
+    let mut px_rgba: Pixel;
 
     while let [px_out, ptail @ ..] = pixels {
         pixels = ptail;
@@ -49,7 +44,7 @@ where
                 px.update_rgb(*r, *g, *b);
                 data = dtail;
             }
-            [QOI_OP_RGBA, r, g, b, a, dtail @ ..] if RGBA => {
+            [QOI_OP_RGBA, r, g, b, a, dtail @ ..] => {
                 px.update_rgba(*r, *g, *b, *a);
                 data = dtail;
             }
@@ -78,7 +73,7 @@ where
             }
         }
 
-        px_rgba = px.as_rgba(0xff);
+        px_rgba = px.as_rgba();
         index[px_rgba.hash_index() as usize] = px_rgba;
         *px_out = px.into();
     }
@@ -92,21 +87,6 @@ where
     Ok(data_len.saturating_sub(data.len()).saturating_sub(QOI_PADDING_SIZE))
 }
 
-#[inline]
-fn decode_impl_slice_all(
-    data: &[u8], out: &mut [u8], channels: u8, src_channels: u8,
-) -> Result<usize> {
-    match (channels, src_channels) {
-        (3, 3) => decode_impl_slice::<3, false>(data, out),
-        (3, 4) => decode_impl_slice::<3, true>(data, out),
-        (4, 3) => decode_impl_slice::<4, false>(data, out),
-        (4, 4) => decode_impl_slice::<4, true>(data, out),
-        _ => {
-            cold();
-            Err(Error::InvalidChannels { channels })
-        }
-    }
-}
 
 /// Decode the image into a pre-allocated buffer.
 ///
@@ -139,17 +119,16 @@ pub fn decode_header(data: impl AsRef<[u8]>) -> Result<Header> {
 
 #[cfg(feature = "std")]
 #[inline]
-fn decode_impl_stream<R: Read, const N: usize, const RGBA: bool>(
+fn decode_impl_stream<R: Read>(
     data: &mut R, out: &mut [u8],
 ) -> Result<()>
 where
-    Pixel<N>: SupportedChannels,
-    [u8; N]: Pod,
+    [u8; 4]: Pod,
 {
-    let mut pixels = cast_slice_mut::<_, [u8; N]>(out);
+    let mut pixels = cast_slice_mut::<_, [u8; 4]>(out);
 
-    let mut index = [Pixel::<N>::new(); 256];
-    let mut px = Pixel::<N>::new().with_a(0xff);
+    let mut index = [Pixel::new(); 256];
+    let mut px = Pixel::new().with_a(0xff);
 
     while let [px_out, ptail @ ..] = pixels {
         pixels = ptail;
@@ -167,7 +146,7 @@ where
                 data.read_exact(&mut p)?;
                 px.update_rgb(p[0], p[1], p[2]);
             }
-            QOI_OP_RGBA if RGBA => {
+            QOI_OP_RGBA => {
                 let mut p = [0; 4];
                 data.read_exact(&mut p)?;
                 px.update_rgba(p[0], p[1], p[2], p[3]);
@@ -207,27 +186,11 @@ where
     Ok(())
 }
 
-#[cfg(feature = "std")]
-#[inline]
-fn decode_impl_stream_all<R: Read>(
-    data: &mut R, out: &mut [u8], channels: u8, src_channels: u8,
-) -> Result<()> {
-    match (channels, src_channels) {
-        (3, 3) => decode_impl_stream::<_, 3, false>(data, out),
-        (3, 4) => decode_impl_stream::<_, 3, true>(data, out),
-        (4, 3) => decode_impl_stream::<_, 4, false>(data, out),
-        (4, 4) => decode_impl_stream::<_, 4, true>(data, out),
-        _ => {
-            cold();
-            Err(Error::InvalidChannels { channels })
-        }
-    }
-}
 
 #[doc(hidden)]
 pub trait Reader: Sized {
     fn decode_header(&mut self) -> Result<Header>;
-    fn decode_image(&mut self, out: &mut [u8], channels: u8, src_channels: u8) -> Result<()>;
+    fn decode_image(&mut self, out: &mut [u8]) -> Result<()>;
 }
 
 pub struct Bytes<'a>(&'a [u8]);
@@ -253,8 +216,8 @@ impl Reader for Bytes<'_> {
     }
 
     #[inline]
-    fn decode_image(&mut self, out: &mut [u8], channels: u8, src_channels: u8) -> Result<()> {
-        let n_read = decode_impl_slice_all(self.0, out, channels, src_channels)?;
+    fn decode_image(&mut self, out: &mut [u8]) -> Result<()> {
+        let n_read = decode_impl_slice(self.0, out)?;
         self.0 = &self.0[n_read..];
         Ok(())
     }
@@ -270,8 +233,8 @@ impl<R: Read> Reader for R {
     }
 
     #[inline]
-    fn decode_image(&mut self, out: &mut [u8], channels: u8, src_channels: u8) -> Result<()> {
-        decode_impl_stream_all(self, out, channels, src_channels)
+    fn decode_image(&mut self, out: &mut [u8]) -> Result<()> {
+        decode_impl_stream(self, out)
     }
 }
 
@@ -280,7 +243,6 @@ impl<R: Read> Reader for R {
 pub struct Decoder<R> {
     reader: R,
     header: Header,
-    channels: Channels,
 }
 
 impl<'a> Decoder<Bytes<'a>> {
@@ -305,7 +267,7 @@ impl<'a> Decoder<Bytes<'a>> {
 
 #[cfg(feature = "std")]
 impl<R: Read> Decoder<R> {
-    /// Creates a new decoder from a generic reader that implements [`Read`](std::io::Read).
+    /// Creates a new decoder from a generic reader that implements [`Read`](Read).
     ///
     /// The header will be decoded immediately upon construction.
     ///
@@ -334,27 +296,7 @@ impl<R: Reader> Decoder<R> {
     #[inline]
     fn new_impl(mut reader: R) -> Result<Self> {
         let header = reader.decode_header()?;
-        Ok(Self { reader, header, channels: header.channels })
-    }
-
-    /// Returns a new decoder with modified number of channels.
-    ///
-    /// By default, the number of channels in the decoded image will be equal
-    /// to whatever is specified in the header. However, it is also possible
-    /// to decode RGB into RGBA (in which case the alpha channel will be set
-    /// to 255), and vice versa (in which case the alpha channel will be ignored).
-    #[inline]
-    pub const fn with_channels(mut self, channels: Channels) -> Self {
-        self.channels = channels;
-        self
-    }
-
-    /// Returns the number of channels in the decoded image.
-    ///
-    /// Note: this may differ from the number of channels specified in the header.
-    #[inline]
-    pub const fn channels(&self) -> Channels {
-        self.channels
+        Ok(Self { reader, header })
     }
 
     /// Returns the decoded image header.
@@ -368,7 +310,7 @@ impl<R: Reader> Decoder<R> {
     /// Can be used to pre-allocate the buffer to decode the image into.
     #[inline]
     pub const fn required_buf_len(&self) -> usize {
-        self.header.n_pixels().saturating_mul(self.channels.as_u8() as usize)
+        self.header.n_pixels().saturating_mul(4)
     }
 
     /// Decodes the image to a pre-allocated buffer and returns the number of bytes written.
@@ -381,7 +323,7 @@ impl<R: Reader> Decoder<R> {
         if unlikely(buf.len() < size) {
             return Err(Error::OutputBufferTooSmall { size: buf.len(), required: size });
         }
-        self.reader.decode_image(buf, self.channels.as_u8(), self.header.channels.as_u8())?;
+        self.reader.decode_image(buf)?;
         Ok(size)
     }
 
@@ -389,7 +331,7 @@ impl<R: Reader> Decoder<R> {
     #[cfg(any(feature = "std", feature = "alloc"))]
     #[inline]
     pub fn decode_to_vec(&mut self) -> Result<Vec<u8>> {
-        let mut out = vec![0; self.header.n_pixels() * self.channels.as_u8() as usize];
+        let mut out = vec![0; self.header.n_pixels() * 4];
         let _ = self.decode_to_buf(&mut out)?;
         Ok(out)
     }

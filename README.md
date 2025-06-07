@@ -7,10 +7,32 @@
 [![MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![unsafe forbidden](https://img.shields.io/badge/unsafe-forbidden-success.svg)](https://github.com/rust-secure-code/safety-dance)
 
-Fork of the rust crate `qoi` ([GitHub](https://github.com/aldanor/qoi-rust), [Docs](https://docs.rs/qoi/latest/qoi/)).
-Changes all instances of `*_be_bytes` to `_le_bytes`; changing the QOI header's endianness from big to little endian.
+Fork of the rust crate `qoi` ([GitHub](https://github.com/aldanor/qoi-rust), [Docs](https://docs.rs/qoi/latest/qoi/)) to accommodate GameMaker's custom QOI image format.
 This is not part of the official QOI format (which is why I needed to fork this crate).
-The library's tests don't work.
+Only RGBA and sRGB are supported since this is what GameMaker uses and the channel count / colorspace aren't even stored in the header.
+The header has been changed to fit GameMaker's custom format:
+ - Byte 0: `'f'`
+ - Byte 1: `'i'`
+ - Byte 2: `'o'`
+ - Byte 3: `'q'`
+ - Byte 4: `width & 0xFF`
+ - Byte 5: `(width >> 8) & 0xFF`
+ - Byte 6: `height & 0xFF`
+ - Byte 7: `(height >> 8) & 0xFF`
+ - Byte 8: `length & 0xFF`
+ - Byte 9: `(length >> 8) & 0xFF`
+ - Byte 10: `(length >> 16) & 0xFF`
+ - Byte 11: `(length >> 24) & 0xFF`
+
+Header as a struct (following the [QOI format's Wikipedia page](https://en.wikipedia.org/wiki/QOI_(image_format))):
+```c
+qoi_header {
+    char magic[4]; // magic bytes "fioq"
+    uint16_t width; // image width in pixels (LE)
+    uint16_t height; // image height in pixels (LE)
+    uint32_t length; // image data length in bytes (LE)
+};
+```
 
 ### Examples
 
